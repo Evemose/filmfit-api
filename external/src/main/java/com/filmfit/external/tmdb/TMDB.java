@@ -1,4 +1,4 @@
 package com.filmfit.external.tmdb;
 
-public class TMDB {
+public interface TMDB {
 }

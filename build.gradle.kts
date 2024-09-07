@@ -55,3 +55,7 @@ dependencyManagement {
 tasks.withType<Test> {
     useJUnitPlatform()
 }
+
+tasks.build {
+    dependsOn("test")
+}

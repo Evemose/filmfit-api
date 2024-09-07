@@ -1,4 +1,8 @@
-package com.filmfit.external.tmdb.com.filmfit.external;
+package com.filmfit.external;
 
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
 public class MapperConfig {
+
 }

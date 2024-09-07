@@ -1,4 +1,7 @@
 package com.filmfit.external.tmdb;
 
-public class TMDBApiAdapter {
+import org.springframework.stereotype.Component;
+
+@Component
+class TMDBApiAdapter implements TMDB {
 }
