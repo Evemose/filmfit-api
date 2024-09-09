@@ -1,11 +1,10 @@
-package com.filmfit.external;
+package com.filmfit.core;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
 
 @SpringBootTest
-class ExternalApplicationTests {
+class CoreApplicationTests {
 
     @Test
     void contextLoads() {

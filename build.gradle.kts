@@ -44,6 +44,8 @@ dependencies {
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:postgresql")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+
+    implementation(project(":actualization"))
 }
 
 dependencyManagement {
@@ -58,4 +60,10 @@ tasks.withType<Test> {
 
 tasks.build {
     dependsOn("test")
+}
+
+childProjects.forEach {
+    it.value.tasks.create("prepareKotlinBuildScriptModel") {
+        tasks.named("prepareKotlinBuildScriptModel").run {  }
+    }
 }
