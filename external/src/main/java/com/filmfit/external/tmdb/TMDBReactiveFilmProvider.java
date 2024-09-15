@@ -19,12 +19,13 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
+import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.ClientRequest;
 import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
@@ -32,29 +33,25 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
-import reactor.core.scheduler.Schedulers;
-import reactor.netty.http.client.HttpClient;
-import reactor.netty.resources.ConnectionProvider;
 import reactor.util.retry.Retry;
 
 @Component("TMDBReactiveFilmProvider")
 @Slf4j
 class TMDBReactiveFilmProvider implements ReactiveFilmProvider {
 
-    private final WebClient webClient;
-
-    private final FilmMapper filmMapper;
-
-    private final TMDBConfigurationProperties properties;
-
+    public static final int MAX_FILMS_PER_PAGE = 20;
     private static final Integer NO_GENRE = Integer.MIN_VALUE;
-
+    private static final float REQUESTS_PER_FILM_AVG = 2.1f;
+    private final WebClient webClient;
+    private final FilmMapper filmMapper;
+    private final TMDBConfigurationProperties properties;
+    private final AtomicInteger totalRequests = new AtomicInteger(0);
     private final RateLimiter rateLimiter = RateLimiter.of("tmdb", RateLimiterConfig.custom()
         .limitRefreshPeriod(Duration.ofSeconds(1))
-        .limitForPeriod(40)
+        .limitForPeriod(35)
         .timeoutDuration(Duration.ofDays(1))
         .build());
+
 
     private final Map<Integer, Genre> genres = Map.ofEntries(
         Map.entry(28, new Genre(1L, "Action")),
@@ -79,24 +76,13 @@ class TMDBReactiveFilmProvider implements ReactiveFilmProvider {
     );
 
     public TMDBReactiveFilmProvider(WebClient.Builder webClient, TMDBConfigurationProperties properties, FilmMapper filmMapper) {
-        var connectionProvider = ConnectionProvider.builder("myConnectionPool")
-            .pendingAcquireMaxCount(Integer.MAX_VALUE)
-            .build();
         this.webClient = webClient
             .baseUrl(properties.baseUrl)
             .filter(apiKeyRequestParamFilter(properties))
             .filter(logRequest())
-            //.clientConnector(new ReactorClientHttpConnector(HttpClient.create(connectionProvider)))
             .build();
         this.properties = properties;
         this.filmMapper = filmMapper;
-    }
-
-    private ExchangeFilterFunction logRequest() {
-        return ExchangeFilterFunction.ofRequestProcessor(clientRequest -> {
-            log.trace("Request: {} {}", clientRequest.method(), clientRequest.url());
-            return Mono.just(clientRequest);
-        });
     }
 
     private static ExchangeFilterFunction apiKeyRequestParamFilter(TMDBConfigurationProperties properties) {
@@ -108,58 +94,106 @@ class TMDBReactiveFilmProvider implements ReactiveFilmProvider {
         );
     }
 
+    private ExchangeFilterFunction logRequest() {
+        return ExchangeFilterFunction.ofRequestProcessor(clientRequest -> {
+            totalRequests.incrementAndGet();
+            log.trace("Request: {} {}", clientRequest.method(), clientRequest.url());
+            return Mono.just(clientRequest);
+        });
+    }
+
+    private static <T> void logReceivedItem(Class<T> clazz, T item) {
+        log.debug("Received {} item: {}", clazz.getSimpleName(), item);
+    }
+
     @Override
     public Flux<Film> getAllFilms() {
-        return getLanguages()
-            .collectMap(SpokenLanguage::iso_639_1, Function.identity())
+        return getTotalPages(QueryFilmUriOptions.builder().build()).map(totalPages -> Thread.ofVirtual().start(() -> {
+                while (true) {
+                    try {
+                        Thread.sleep(Duration.ofMinutes(5).toMillis());
+                        log.info("Total requests: {}, completed approximately {}% of the task", totalRequests.get(),
+                            100 * totalRequests.get() / (totalPages * MAX_FILMS_PER_PAGE * REQUESTS_PER_FILM_AVG));
+                    } catch (InterruptedException e) {
+                        log.info("Logger thread interrupted. In case population is not finished yet, an exception has occurred.");
+                    }
+                }
+            }))
             .flux()
-            .flatMap(language -> getCountries()
-                .collectMap(CountryInfo::iso_3166_1, Function.identity())
+            .flatMap((thread) -> getLanguages()
+                .collectMap(SpokenLanguage::iso_639_1, Function.identity())
                 .flux()
-                .flatMap(country -> getAllFilmsMainPipeline(language, country))
-            ).transformDeferred(RateLimiterOperator.of(rateLimiter));
+                .flatMap(language -> getCountries()
+                    .collectMap(CountryInfo::iso_3166_1, Function.identity())
+                    .flux()
+                    .flatMap(country -> getAllFilmsMainPipeline(language, country))
+                ).doOnComplete(() -> {
+                    log.info("Population finished without errors");
+                    thread.interrupt();
+                })
+                .doOnError(_ -> thread.interrupt())
+            );
     }
 
     private Flux<Film> getAllFilmsMainPipeline(Map<String, SpokenLanguage> languages, Map<String, CountryInfo> countries) {
         return getGenres()
             .flatMap(genreAndPreviouslyQueried -> getYears()
-                .flatMap(year -> Flux.fromIterable(countries.values())
-                    .flatMap(country -> {
-                        var queryBuilder = QueryFilmUriOptions.builder()
-                            .year(year)
-                            .genre(genreAndPreviouslyQueried.getKey())
-                            .country(country.iso_3166_1())
-                            .previousGenres(genreAndPreviouslyQueried.getValue());
+                .flatMap(year -> getTotalPages(QueryFilmUriOptions.builder()
+                        .year(year)
+                        .genre(genreAndPreviouslyQueried.getKey())
+                        .previousGenres(genreAndPreviouslyQueried.getValue())
+                        .build()).flux().flatMap(totalPages -> {
+                        if (totalPages > 1000) {
+                            return Flux.fromIterable(countries.values())
+                                .flatMap(country -> {
+                                    var queryBuilder = QueryFilmUriOptions.builder()
+                                        .year(year)
+                                        .genre(genreAndPreviouslyQueried.getKey())
+                                        .country(country.iso_3166_1())
+                                        .previousGenres(genreAndPreviouslyQueried.getValue());
 
-                        return getTotalPages(queryBuilder.build()).flux()
-                            .flatMap(totalPages -> {
-                                if (totalPages > 1000) {
-                                    log.error("Too many pages for genre: {}, year: {}, total pages: {}, country: {}",
-                                        genreAndPreviouslyQueried.getKey(), year, totalPages, country.iso_3166_1());
-                                    return Flux.error(new RuntimeException("Too many pages"));
-                                } else if (totalPages <= 500) {
-                                    return Flux.range(1, totalPages)
-                                        .flatMap(page -> getAllFilms(queryBuilder.page(page).build()));
-                                } else {
-                                    return Flux.concat(
-                                        Flux.range(1, 500)
-                                            .flatMap(page -> getAllFilms(queryBuilder.page(page).build())),
-                                        Flux.range(1, totalPages - 500)
-                                            .flatMap(page -> getAllFilms(queryBuilder.page(page).ascending(true).build()))
-                                    );
-                                }
-                            }).transformDeferred(RateLimiterOperator.of(rateLimiter));
+                                    return getFilmsForQuery(queryBuilder);
+                                });
+                        } else {
+                            var queryBuilder = QueryFilmUriOptions.builder()
+                                .year(year)
+                                .genre(genreAndPreviouslyQueried.getKey())
+                                .previousGenres(genreAndPreviouslyQueried.getValue());
+
+                            return getFilmsForQuery(queryBuilder);
+                        }
                     })
                 )
+                .distinct(FilmListItem::id)
                 .flatMap(film -> getFilmDetails(film.id()))
                 .flatMap(film -> (
                     film.belongsToCollection() != null ? getCollection(film.belongsToCollection().name())
-                        : Flux.<CollectionInfo>empty()).zipWith(Mono.just(film))
+                        : Flux.just(Optional.<CollectionInfo>empty())).zipWith(Mono.just(film))
                 )
                 .map(collectionsAndFilm -> filmMapper.toFilm(
                     collectionsAndFilm.getT2(),
-                    new FilmMapper.FilmMappingContext(languages, countries, collectionsAndFilm.getT1())
+                    new FilmMapper.FilmMappingContext(languages, countries, collectionsAndFilm.getT1().orElse(null))
                 )));
+    }
+
+    private Flux<FilmListItem> getFilmsForQuery(QueryFilmUriOptions.QueryFilmUriOptionsBuilder queryBuilder) {
+        return getTotalPages(queryBuilder.build()).flux()
+            .flatMap(totalPages -> {
+                if (totalPages > 1000) {
+                    log.error("Too many pages for query: {}", queryBuilder.build());
+                    return Flux.error(new RuntimeException("Too many pages"));
+                } else if (totalPages <= 500) {
+                    return Flux.range(1, totalPages)
+                        .flatMap(page -> getAllFilms(queryBuilder.page(page).build()));
+                } else {
+                    return Flux.concat(
+                        Flux.range(1, 500)
+                            .flatMap(page -> getAllFilms(queryBuilder.page(page).build())),
+                        Flux.range(1, totalPages - 500)
+                            .flatMap(page -> getAllFilms(queryBuilder.page(page).ascending(true).build()))
+                    );
+                }
+            });
     }
 
     private Mono<Integer> getTotalPages(QueryFilmUriOptions queryFilmUriOptions) {
@@ -171,7 +205,9 @@ class TMDBReactiveFilmProvider implements ReactiveFilmProvider {
             .uri(buildGetAllFilmsUri(queryFilmUriOptions))
             .retrieve()
             .bodyToMono(TotalPagesResponse.class)
-            .map(resp -> resp.total_pages);
+            .map(resp -> resp.total_pages)
+            .doOnNext(totalPages -> log.debug("Received total pages: {} for {}", totalPages, queryFilmUriOptions))
+            .transformDeferred(RateLimiterOperator.of(rateLimiter));
     }
 
     private Flux<FilmListItem> getAllFilms(QueryFilmUriOptions queryFilmUriOptions) {
@@ -189,25 +225,35 @@ class TMDBReactiveFilmProvider implements ReactiveFilmProvider {
             }))
             .map(FilmResponse::results)
             .doOnError(e -> log.error("Failed to get films, {}", queryFilmUriOptions, e))
-            .doOnNext(films -> log.debug("Received films: {}", films))
+            .doOnNext(films -> log.debug("Received {} films", films.size()))
             .flux()
+            .onErrorResume(_ -> Flux.empty())
             .flatMap(Flux::fromIterable)
-            .transformDeferred(RateLimiterOperator.of(rateLimiter)).log();
+            .transformDeferred(RateLimiterOperator.of(rateLimiter));
     }
 
     private URI buildGetAllFilmsUri(QueryFilmUriOptions queryFilmUriOptions) {
         var builder = RequestUrlBuilder.of(properties.getEndpoint(Endpoint.MOVIES_DISCOVER))
             .requestParam("include_adult", "true")
-            .requestParam("year", String.valueOf(queryFilmUriOptions.year()))
             .requestParam("page", String.valueOf(queryFilmUriOptions.page()))
-            .requestParam("sort_by", "popularity" + (queryFilmUriOptions.ascending() ? ".asc" : ".desc"))
-            .requestParam("with_origin_country", queryFilmUriOptions.country())
-            .requestParam("without_genres", queryFilmUriOptions.previousGenres().stream()
-                .map(Object::toString).collect(Collectors.joining(",")));
+            .requestParam("sort_by", "popularity" + (queryFilmUriOptions.ascending() ? ".asc" : ".desc"));
 
         // there are films with no genre, so we need to include them
-        if (queryFilmUriOptions.genre() != NO_GENRE) {
-            builder.requestParam("with_genres", String.valueOf(queryFilmUriOptions.genre()));
+        if (queryFilmUriOptions.genre().isPresent()) {
+            builder = builder.requestParam("with_genres", String.valueOf(queryFilmUriOptions.genre().getAsInt()));
+        }
+
+        if (!queryFilmUriOptions.previousGenres().isEmpty()) {
+            builder = builder.requestParam("without_genres", queryFilmUriOptions.previousGenres().stream()
+                .map(Object::toString).collect(Collectors.joining(",")));
+        }
+
+        if (queryFilmUriOptions.year().isPresent()) {
+            builder = builder.requestParam("year", String.valueOf(queryFilmUriOptions.year().getAsInt()));
+        }
+
+        if (queryFilmUriOptions.country().isPresent()) {
+            builder = builder.requestParam("with_origin_country", queryFilmUriOptions.country().get());
         }
 
         return builder.buildUri();
@@ -216,8 +262,9 @@ class TMDBReactiveFilmProvider implements ReactiveFilmProvider {
     private Flux<Map.Entry<Integer, List<Integer>>> getGenres() {
         var genresAndPrevious = new ArrayList<Map.Entry<Integer, List<Integer>>>();
         var currentPrevious = new ArrayList<Integer>();
+        var keyList = new ArrayList<>(genres.keySet());
 
-        for (var genre : genres.keySet()) {
+        for (var genre : keyList) {
             genresAndPrevious.add(Map.entry(genre, List.copyOf(currentPrevious)));
             currentPrevious.add(genre);
         }
@@ -237,7 +284,9 @@ class TMDBReactiveFilmProvider implements ReactiveFilmProvider {
             .retrieve()
             .bodyToMono(FilmDetails.class)
             .timeout(Duration.ofMinutes(1))
-            .doOnNext(film -> log.debug("Received film details: {}", film))
+            .doOnNext(film -> log.debug("Received {} film details", film))
+            .doOnError(e -> log.error("Failed to get film details", e))
+            .onErrorResume(_ -> Mono.empty())
             .transformDeferred(RateLimiterOperator.of(rateLimiter));
     }
 
@@ -249,7 +298,7 @@ class TMDBReactiveFilmProvider implements ReactiveFilmProvider {
         return getFromEndpoint(CountryInfo.class, URI.create(properties.getEndpoint(Endpoint.COUNTRIES)));
     }
 
-    private Flux<CollectionInfo> getCollection(String name) {
+    private Flux<Optional<CollectionInfo>> getCollection(String name) {
         record CollectionResponse(List<CollectionInfo> results) {
         }
 
@@ -258,19 +307,15 @@ class TMDBReactiveFilmProvider implements ReactiveFilmProvider {
             .requestParam("include_adult", "true")
             .buildUri())
             .doOnNext(item -> logReceivedItem(CollectionResponse.class, item))
+            .onErrorResume(_ -> Mono.empty())
             .flatMap(response -> response.results().isEmpty() ?
                 logMissingAndReturnEmpty(CollectionResponse.class, Map.of("query", name, "include_adult", "true"))
-                : Flux.just(response.results().getFirst()))
-            .transformDeferred(RateLimiterOperator.of(rateLimiter)).log();
+                : Flux.just(Optional.of(response.results().getFirst())));
     }
 
-    private static <T> void logReceivedItem(Class<T> clazz, T item) {
-        log.debug("Received {} item: {}", clazz.getSimpleName(), item);
-    }
-
-    private <T> Flux<T> logMissingAndReturnEmpty(Class<?> clazz, Map<String, String> parameters) {
+    private <T> Flux<Optional<T>> logMissingAndReturnEmpty(Class<?> clazz, Map<String, String> parameters) {
         log.warn("Failed to get {} for parameters {}", clazz.getSimpleName(), parameters);
-        return Flux.empty();
+        return Flux.just(Optional.empty());
     }
 
     private <T> Flux<T> getFromEndpoint(Class<T> clazz, URI endpoint) {
@@ -281,16 +326,37 @@ class TMDBReactiveFilmProvider implements ReactiveFilmProvider {
             .bodyToFlux(clazz)
             .timeout(Duration.ofMinutes(1))
             .doOnNext(item -> logReceivedItem(clazz, item))
-            .transformDeferred(RateLimiterOperator.of(rateLimiter)).log();
+            .transformDeferred(RateLimiterOperator.of(rateLimiter));
     }
 
     @Builder
-    private record QueryFilmUriOptions(int page, int genre, int year, boolean ascending, List<Integer> previousGenres, String country) {
+    private record QueryFilmUriOptions(int page, OptionalInt genre, OptionalInt year, boolean ascending, List<Integer> previousGenres, Optional<String> country) {
         @SuppressWarnings("all")
         public static class QueryFilmUriOptionsBuilder {
             private int page = 1;
             private boolean ascending = false;
             private List<Integer> previousGenres = List.of();
+            private OptionalInt genre = OptionalInt.empty();
+            private OptionalInt year = OptionalInt.empty();
+            private Optional<String> country = Optional.empty();
+
+            public QueryFilmUriOptionsBuilder genre(int genre) {
+                if (genre == NO_GENRE) {
+                    this.genre = OptionalInt.empty();
+                }
+                this.genre = OptionalInt.of(genre);
+                return this;
+            }
+
+            public QueryFilmUriOptionsBuilder year(int year) {
+                this.year = OptionalInt.of(year);
+                return this;
+            }
+
+            public QueryFilmUriOptionsBuilder country(String country) {
+                this.country = Optional.of(country);
+                return this;
+            }
         }
     }
 }

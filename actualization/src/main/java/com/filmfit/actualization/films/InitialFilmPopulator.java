@@ -11,6 +11,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
+
+// FIXME see where some films disappear
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -38,12 +40,13 @@ public class InitialFilmPopulator {
         var logger = startRegularLogging(counter);
 
         reactiveFilmProvider.getAllFilms()
-            .doOnNext(film -> {
-                filmService.saveDeferred(film);
+            .flatMap(film -> {
                 counter.incrementAndGet();
+                return filmService.saveReactive(film);
             })
+            .doOnComplete(filmService::flushDeferred)
             .doOnComplete(() -> applicationEventPublisher.publishEvent(new FilmsInitializationFinishedEvent()))
-            .doOnComplete(() -> log.info("Films population finised in {} seconds", (System.currentTimeMillis() - start) / 1000f))
+            .doOnComplete(() -> log.info("Films population finished in {} seconds", (System.currentTimeMillis() - start) / 1000f))
             .doFinally(_ -> logger.interrupt())
             .doOnError(e -> log.error("Error while populating films", e))
             .subscribe();
@@ -57,7 +60,7 @@ public class InitialFilmPopulator {
                 try {
                     Thread.sleep(minute);
                 } catch (InterruptedException e) {
-                    log.error("Logging thread interrupted", e);
+                    log.info("Population logging thread interrupted");
                     return;
                 }
                 log.info("Populated {} films, total {}", counter.get() - current, counter.get());

@@ -3,15 +3,24 @@ package com.filmfit.core.film;
 import com.filmfit.core.common.Company;
 import com.filmfit.core.common.Country;
 import com.filmfit.core.common.Language;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
+import jakarta.persistence.ManyToOne;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-
-import jakarta.persistence.*;
-import jakarta.validation.constraints.*;
-import java.util.List;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Data
@@ -30,14 +39,13 @@ public class Film {
     @NotNull
     private Boolean adult;
 
-    @Column(columnDefinition="TEXT")
+    @Column(columnDefinition = "TEXT")
     private String backdropPath;
 
     @ManyToOne(cascade = {CascadeType.DETACH, CascadeType.MERGE, CascadeType.PERSIST, CascadeType.REFRESH})
     @JoinColumn(name = "collection_id")
     private FilmCollection collection;
 
-    @Min(0)
     private Long budget;
 
     @ManyToMany(cascade = {CascadeType.DETACH, CascadeType.MERGE, CascadeType.PERSIST, CascadeType.REFRESH})
@@ -48,10 +56,10 @@ public class Film {
     )
     private List<Genre> genres;
 
-    @Column(columnDefinition="TEXT")
+    @Column(columnDefinition = "TEXT")
     private String homepage;
 
-    @Column(columnDefinition="TEXT")
+    @Column(columnDefinition = "TEXT")
     private String imdbId;
 
     @ManyToMany(cascade = {CascadeType.DETACH, CascadeType.MERGE, CascadeType.PERSIST, CascadeType.REFRESH})
@@ -65,16 +73,15 @@ public class Film {
     @ManyToOne(cascade = {CascadeType.DETACH, CascadeType.MERGE, CascadeType.PERSIST, CascadeType.REFRESH})
     private Language originalLanguage;
 
-    @Column(columnDefinition="TEXT")
+    @Column(columnDefinition = "TEXT")
     private String originalTitle;
 
     @Column(columnDefinition = "TEXT")
     private String overview;
 
-    @Min(0)
     private Double popularity;
 
-    @Column(columnDefinition="TEXT")
+    @Column(columnDefinition = "TEXT")
     private String posterPath;
 
     @ManyToMany(cascade = {CascadeType.DETACH, CascadeType.MERGE, CascadeType.PERSIST, CascadeType.REFRESH})
@@ -95,10 +102,8 @@ public class Film {
 
     private LocalDate releaseDate;
 
-    @Positive
     private Long revenue;
 
-    @Positive
     private Integer runtime;
 
     @ManyToMany(cascade = {CascadeType.DETACH, CascadeType.MERGE, CascadeType.PERSIST, CascadeType.REFRESH})
@@ -109,22 +114,19 @@ public class Film {
     )
     private List<Language> spokenLanguages;
 
-    @Column(columnDefinition="TEXT")
+    @Column(columnDefinition = "TEXT")
     private String status;
 
-    @Column(columnDefinition="TEXT")
+    @Column(columnDefinition = "TEXT")
     private String tagline;
 
     @NotBlank
-    @Column(columnDefinition="TEXT")
+    @Column(columnDefinition = "TEXT")
     private String title;
 
     private Boolean video;
 
-    @Min(0)
-    @Max(10)
     private Double voteAverage;
 
-    @Min(0)
     private Long voteCount;
 }
