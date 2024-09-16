@@ -19,9 +19,9 @@ public class Country {
     @Id
     private String iso_3166_1;
 
-    @Column(unique = true, updatable = false)
+    @Column(updatable = false)
     private String nativeName;
 
-    @Column(unique = true, updatable = false)
+    @Column(updatable = false)
     private String englishName;
 }
