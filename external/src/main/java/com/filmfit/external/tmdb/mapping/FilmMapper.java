@@ -7,7 +7,6 @@ import com.filmfit.external.tmdb.dto.CollectionInfo;
 import com.filmfit.external.tmdb.dto.CountryInfo;
 import com.filmfit.external.tmdb.dto.FilmDetails;
 import com.filmfit.external.tmdb.dto.SpokenLanguage;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import lombok.NonNull;
@@ -36,11 +35,11 @@ public abstract class FilmMapper {
     protected CollectionMapper collectionMapper;
 
     @Mapping(target = "productionCompanies", expression =
-            "java(filmDetails.productionCompanies().stream().map(companyMapper::toCompany).toList())")
+        "java(filmDetails.productionCompanies().stream().map(companyMapper::toCompany).toList())")
     @Mapping(target = "productionCountries", expression =
-            "java(filmDetails.productionCountries().stream().map(prodCountry -> countryMapper.toCountry(context.countries().get(prodCountry.iso_3166_1()))).toList())")
+        "java(filmDetails.productionCountries().stream().map(prodCountry -> countryMapper.toCountry(context.countries().get(prodCountry.iso_3166_1()))).toList())")
     @Mapping(target = "spokenLanguages", expression =
-            "java(filmDetails.spokenLanguages().stream().map(lang -> languageMapper.toLanguage(context.languages().get(lang.iso_639_1()))).toList())")
+        "java(filmDetails.spokenLanguages().stream().map(lang -> languageMapper.toLanguage(context.languages().get(lang.iso_639_1()))).toList())")
     @Mapping(target = "collection",
         expression = "java(context.collection() == null ? null : collectionMapper.toCollection(context.collection()))")
     @Mapping(target = "originalLanguage", expression = "java(mapLanguage(filmDetails, context))")

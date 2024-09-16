@@ -11,12 +11,10 @@ class TMDBConfigurationProperties {
 
     @NonNull
     public final String baseUrl;
-
-    @NonNull
-    private final Map<Endpoint, String> endpoints;
-
     @NonNull
     public final String apiKey;
+    @NonNull
+    private final Map<Endpoint, String> endpoints;
 
     @ConstructorBinding
     public TMDBConfigurationProperties(@NonNull String baseUrl, @NonNull Map<Endpoint, String> endpoints, @NonNull String apiKey) {

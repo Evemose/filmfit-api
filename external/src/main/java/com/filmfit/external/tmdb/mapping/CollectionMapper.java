@@ -1,7 +1,6 @@
 package com.filmfit.external.tmdb.mapping;
 
 import com.filmfit.core.film.FilmCollection;
-import com.filmfit.external.tmdb.dto.BelongsToCollection;
 import com.filmfit.external.tmdb.dto.CollectionInfo;
 import lombok.NonNull;
 import org.mapstruct.Mapper;

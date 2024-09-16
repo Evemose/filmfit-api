@@ -2,7 +2,6 @@ package com.filmfit.external.tmdb.dto;
 
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
-import com.filmfit.core.film.FilmCollection;
 import com.filmfit.core.film.Genre;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;

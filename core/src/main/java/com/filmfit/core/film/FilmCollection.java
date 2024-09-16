@@ -1,18 +1,17 @@
 package com.filmfit.core.film;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.util.ArrayList;
 import java.util.List;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.validation.constraints.NotBlank;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Data
@@ -43,6 +42,7 @@ public class FilmCollection {
     @Column(columnDefinition = "TEXT")
     private String overview;
 
+    @Builder.Default
     @OneToMany(mappedBy = "collection")
     private List<Film> films = new ArrayList<>();
 }

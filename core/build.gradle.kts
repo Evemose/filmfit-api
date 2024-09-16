@@ -1,5 +1,6 @@
 plugins {
     java
+    id("java-library")
     id("org.springframework.boot") version "3.3.3"
     id("io.spring.dependency-management") version "1.1.6"
 }
@@ -30,11 +31,9 @@ dependencies {
     implementation("org.springframework.modulith:spring-modulith-starter-core")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.modulith:spring-modulith-starter-jpa")
-    implementation("org.springframework.boot:spring-boot-starter-data-r2dbc")
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
     testImplementation("org.testcontainers:postgresql")
-    testImplementation("io.projectreactor:reactor-test")
     testImplementation("org.testcontainers:db2")
     compileOnly("org.projectlombok:lombok")
     developmentOnly("org.springframework.boot:spring-boot-devtools")

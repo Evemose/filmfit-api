@@ -40,11 +40,10 @@ public class InitialFilmPopulator {
         var logger = startRegularLogging(counter);
 
         reactiveFilmProvider.getAllFilms()
-            .flatMap(film -> {
+            .doOnNext(film -> {
                 counter.incrementAndGet();
-                return filmService.saveReactive(film);
+                Thread.ofVirtual().start(() -> filmService.save(film));
             })
-            .doOnComplete(filmService::flushDeferred)
             .doOnComplete(() -> applicationEventPublisher.publishEvent(new FilmsInitializationFinishedEvent()))
             .doOnComplete(() -> log.info("Films population finished in {} seconds", (System.currentTimeMillis() - start) / 1000f))
             .doFinally(_ -> logger.interrupt())

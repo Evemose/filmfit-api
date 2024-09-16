@@ -64,6 +64,6 @@ tasks.build {
 
 childProjects.forEach {
     it.value.tasks.create("prepareKotlinBuildScriptModel") {
-        tasks.named("prepareKotlinBuildScriptModel").run {  }
+        tasks.named("prepareKotlinBuildScriptModel").run { }
     }
 }

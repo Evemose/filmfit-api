@@ -3,9 +3,9 @@ package com.filmfit.external;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
 import java.util.Objects;
 import java.util.regex.Pattern;
 import lombok.AccessLevel;
@@ -51,6 +51,10 @@ public class RequestUrlBuilder {
         return this;
     }
 
+    public URI buildUri() {
+        return URI.create(build());
+    }
+
     public String build() {
         if (pathVariables.values().stream().anyMatch(Objects::isNull)) {
             throw new IllegalStateException("Not all path variables are set");
@@ -75,9 +79,5 @@ public class RequestUrlBuilder {
         }
 
         return builder.toString();
-    }
-
-    public URI buildUri() {
-        return URI.create(build());
     }
 }
