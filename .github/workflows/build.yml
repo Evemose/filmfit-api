@@ -19,10 +19,31 @@ jobs:
                 run: chmod +x ./gradlew
             -   name: Build with Gradle
                 run: ./gradlew build
-            -   name: Archive production artifacts
+            -   name: Archive main artifacts
                 if: always()
                 uses: actions/upload-artifact@v4
                 with:
-                    name: tests-report
+                    name: main-tests-report
                     path: |
                         build/reports/tests/test/
+            -   name: Archive core artifacts
+                if: always()
+                uses: actions/upload-artifact@v4
+                with:
+                    name: core-tests-report
+                    path: |
+                        core/build/reports/tests/test/
+            -   name: Archive external artifacts
+                if: always()
+                uses: actions/upload-artifact@v4
+                with:
+                    name: external-tests-report
+                    path: |
+                        external/build/reports/tests/test/
+            -   name: Archive actualization artifacts
+                if: always()
+                uses: actions/upload-artifact@v4
+                with:
+                    name: actualization-tests-report
+                    path: |
+                        actualization/build/reports/tests/test/
