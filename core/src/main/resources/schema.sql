@@ -1,0 +1,1 @@
+create index idx_films_tmdb_id on film using hash (tmdb_id);
