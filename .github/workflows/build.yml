@@ -24,4 +24,4 @@ jobs:
                 with:
                     name: tests-report
                     path: |
-                        filmfit-api/filmfit-api/core/build/reports/tests/test
+                        filmfit-api/core/build/reports/tests/test/
