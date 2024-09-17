@@ -19,9 +19,10 @@ jobs:
                 run: chmod +x ./gradlew
             -   name: Build with Gradle
                 run: ./gradlew build
-            -   name: Archive production artifacts
+            -   name: Archive artifacts
+                if: always()
                 uses: actions/upload-artifact@v4
                 with:
                     name: tests-report
                     path: |
-                        filmfit-api/filmfit-api/core/build/reports/tests/test/
+                        **/build/reports/tests/test/
