@@ -36,6 +36,9 @@ dependencies {
     implementation("io.github.resilience4j:resilience4j-reactor:2.2.0")
 
     implementation("org.mapstruct:mapstruct:1.6.0")
+    testImplementation("org.testcontainers:junit-jupiter")
+    testImplementation("org.springframework.boot:spring-boot-testcontainers")
+    testImplementation("org.testcontainers:postgresql")
 
     compileOnly("org.projectlombok:lombok")
 
