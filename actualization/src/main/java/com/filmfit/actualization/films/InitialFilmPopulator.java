@@ -1,16 +1,16 @@
 package com.filmfit.actualization.films;
 
-import com.filmfit.core.film.FilmService;
 import com.filmfit.core.film.FilmsInitializationFinishedEvent;
+import com.filmfit.core.film.QueryFilmService;
+import com.filmfit.core.film.UpsertFilmService;
 import com.filmfit.external.ReactiveFilmProvider;
-import java.io.BufferedReader;
+import jakarta.annotation.PostConstruct;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-import javax.sql.DataSource;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.context.event.ApplicationStartedEvent;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Profile;
 import org.springframework.context.event.EventListener;
@@ -28,7 +28,9 @@ public class InitialFilmPopulator {
 
     private static final String BACKUP_FILE = "backup_lfs.sql";
 
-    private final FilmService filmService;
+    private final QueryFilmService queryFilmService;
+
+    private final UpsertFilmService upsertFilmService;
 
     private final ReactiveFilmProvider reactiveFilmProvider;
 
@@ -36,16 +38,17 @@ public class InitialFilmPopulator {
 
     private final JdbcTemplate jdbcTemplate;
 
-    @EventListener
+    @EventListener(ApplicationReadyEvent.class)
     @SneakyThrows
-    public void populate(ApplicationStartedEvent ignored) {
+    public void populate() {
         var start = System.currentTimeMillis();
 
         var counter = new AtomicInteger();
 
 
-        if (filmService.isInitialized()) {
+        if (queryFilmService.isInitialized()) {
             log.info("Films already populated. Skipping");
+            applicationEventPublisher.publishEvent(new FilmsInitializationFinishedEvent());
             return;
         } else {
             log.info("Starting films population");
@@ -71,7 +74,7 @@ public class InitialFilmPopulator {
         reactiveFilmProvider.getAllFilms()
             .doOnNext(film -> {
                 counter.incrementAndGet();
-                Thread.ofVirtual().start(() -> filmService.save(film));
+                Thread.ofVirtual().start(() -> upsertFilmService.save(film));
             })
             .doOnComplete(() -> applicationEventPublisher.publishEvent(new FilmsInitializationFinishedEvent()))
             .doOnComplete(() -> log.info("Films population finished in {} seconds", (System.currentTimeMillis() - start) / 1000f))

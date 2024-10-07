@@ -1,43 +1,39 @@
 package com.filmfit.core.film;
 
+import com.filmfit.core.film.vector.EncodedFilmService;
 import jakarta.annotation.PostConstruct;
+import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import lombok.Getter;
 import lombok.Locked;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Scope;
 import org.springframework.context.annotation.ScopedProxyMode;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 @Scope(proxyMode = ScopedProxyMode.TARGET_CLASS)
-class FilmServiceImpl implements FilmService {
+@RequiredArgsConstructor
+class FilmServiceImpl implements UpsertFilmService, QueryFilmService {
 
     private static final int SAVE_BATCH_SIZE = 100;
 
     private final FilmRepository filmRepository;
     private final TransactionTemplate transactionTemplate;
+    private final EncodedFilmService encodedFilmService;
 
     private final BlockingQueue<Film> saveQueue = new LinkedBlockingQueue<>();
+
     @Getter
     private boolean initialized = false;
 
-    FilmServiceImpl(
-        FilmRepository filmRepository,
-        PlatformTransactionManager transactionManager
-    ) {
-        this.filmRepository = filmRepository;
-        this.transactionTemplate = new TransactionTemplate(transactionManager);
-        transactionTemplate.setIsolationLevel(TransactionTemplate.ISOLATION_READ_COMMITTED);
-        transactionTemplate.setPropagationBehavior(TransactionTemplate.PROPAGATION_REQUIRES_NEW);
-    }
-
     @EventListener
     protected void onInitializationFinished(FilmsInitializationFinishedEvent ignored) {
+        encodedFilmService.initializeForSource(filmRepository::streamAll);
         initialized = true;
     }
 
@@ -74,4 +70,8 @@ class FilmServiceImpl implements FilmService {
         initialized = filmRepository.count() > 0;
     }
 
+    @Override
+    public List<Film> findKMostSimilar(Film film, int k) {
+        return filmRepository.findAllByIdIn(encodedFilmService.findIdsOfKMostSimilar(film, k));
+    }
 }

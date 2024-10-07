@@ -1,12 +1,15 @@
 package com.filmfit.core.common;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.ManyToOne;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.springframework.lang.Nullable;
 
 @Entity
 @Data
@@ -23,6 +26,7 @@ public class Company {
 
     private String logoPath;
 
-    // TODO: change to Country
-    private String originCountry;
+    @Nullable
+    @ManyToOne(cascade = CascadeType.ALL)
+    private Country originCountry;
 }
